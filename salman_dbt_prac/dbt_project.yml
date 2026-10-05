@@ -31,13 +31,16 @@ clean-targets:         # directories to be removed by `dbt clean`
 # files using the `{{ config(...) }}` macro.
 models:
   salman_dbt_prac:
-    # Config indicated by + and applies to all files under models/example/
     Bronze:
       +materialized: table
-      schema: bronze
-    silver:
+      +schema: bronze
+    Silver:
       +materialized: table
-      schema: silver
-    gold:
+      +schema: silver
+    Gold:
       +materialized: table
-      schema: gold
+      +schema: gold
+
+seeds:
+  salman_dbt_prac:
+    +schema: bronze
