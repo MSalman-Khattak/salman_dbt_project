@@ -1,9 +1,39 @@
 version: 2
 models:
-  - name: bronze_dim_date #  Must match the filename of a model -- including case sensitivity.
-    config:
-        materialized: view
-
-  - name: bronze_dim_products #  Must match the filename of a model -- including case sensitivity.
+  - name: bronze_dim_date
     config:
       materialized: view
+      schema: bronze
+
+  - name: bronze_Dim_products
+    config:
+      materialized: view
+
+  - name: bronze_sales
+    columns:
+      - name: sales_id
+        data_tests:
+          - unique
+          - not_null
+      - name: gross_amount
+        data_tests:
+          - generic_only_positive
+            
+  - name: bronze_Dim_store
+    columns:
+      - name: store_sk
+        data_tests:
+          - unique
+          - not_null
+      - name: store_name
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [MegaMart Manhattan,'MegaMart Toronto', 'MegaMart San Jose', 'MegaMart Austin', 'MegaMart Brooklyn']
+              config:
+                severity: warn
+      - name: Country
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['USA', 'Canada']
