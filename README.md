@@ -1,54 +1,122 @@
 # Salman DBT Practice Project
 
-A dbt (data build tool) project implementing a **Medallion Architecture** (Bronze → Silver → Gold) on **Databricks**, built to practice data transformation, testing, and modeling patterns for an analytics engineering workflow.
+A production-deployed **dbt (data build tool)** project implementing a **Medallion Architecture** (Bronze → Silver → Gold) on **Databricks**, built end-to-end: raw ingestion, layered transformation, data quality testing, slowly changing dimension tracking, and multi-environment deployment.
+
+![dbt](https://img.shields.io/badge/dbt-1.12.5-FF694B?logo=dbt)
+![Databricks](https://img.shields.io/badge/Databricks-Delta%20Lake-FF3621?logo=databricks)
+![Status](https://img.shields.io/badge/status-deployed-brightgreen)
+
+---
+
+## Table of Contents
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Core dbt Concepts Used](#core-dbt-concepts-used)
+- [Setup](#setup)
+- [Usage](#usage)
+- [Models](#models)
+- [Macros](#macros)
+- [Testing Strategy](#testing-strategy)
+- [Snapshots (SCD Type 2)](#snapshots-scd-type-2)
+- [Environments & Deployment](#environments--deployment)
+- [Lessons Learned](#lessons-learned)
+
+---
 
 ## Overview
 
-This project ingests raw sales, customer, product, store, and returns data, then progressively cleans, enriches, and aggregates it through three layers:
+This project simulates a real-world analytics engineering workflow: ingesting raw sales, customer, product, store, and returns data from a source system, then progressively cleaning, enriching, testing, and aggregating it into analytics-ready datasets — deployed safely across **dev** and **production** Databricks environments.
 
-| Layer | Purpose | Materialization |
-|-------|---------|------------------|
-| **Bronze** | Raw, minimally transformed data straight from source | View |
-| **Silver** | Cleaned, joined, and business-logic-enriched data | Table |
-| **Gold** | Aggregated, analytics-ready datasets for reporting | Table / Snapshot |
+## Architecture
+
+```
+Source System (source_schema)
+        │
+        ▼
+┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+│    BRONZE     │ ───▶ │    SILVER     │ ───▶ │     GOLD      │
+│  Raw passthrough     │ Cleaned, joined,      │ Aggregated,   │
+│  views               │ enriched tables       │ deduplicated, │
+│                       │                       │ analytics-    │
+│                       │                       │ ready tables  │
+└───────────────┘      └───────────────┘      └───────────────┘
+                                                        │
+                                                        ▼
+                                                 ┌───────────────┐
+                                                 │   SNAPSHOTS   │
+                                                 │ SCD Type 2    │
+                                                 │ historical    │
+                                                 │ tracking      │
+                                                 └───────────────┘
+```
+
+| Layer | Purpose | Materialization | Example |
+|-------|---------|------------------|---------|
+| **Bronze** | Raw, minimally transformed data straight from source | View / Table | `bronze_sales`, `bronze_Dim_products` |
+| **Silver** | Cleaned, joined, business-logic-enriched data | Table | `silver_sales_information` |
+| **Gold** | Aggregated, deduplicated, analytics-ready datasets | Table | `source_gold_items` |
+| **Snapshots** | Point-in-time historical change tracking | SCD Type 2 | `gold_items` |
 
 ## Tech Stack
 
-- **dbt Core** (1.12.x)
-- **Databricks** (SQL Warehouse, Delta Lake)
-- **Python** / **uv** for environment management
-- **Git** / **GitHub** for version control
+- **dbt Core 1.12.5** — transformation framework
+- **dbt-databricks 1.10.9** — Databricks adapter
+- **Databricks** (Free Edition) — Delta Lake, Unity Catalog, Serverless SQL Warehouse
+- **Python 3.11 + uv** — environment and package management
+- **Git / GitHub** — version control
 
 ## Project Structure
 
 ```
 salman_dbt_prac/
+├── analyses/                  # Ad-hoc analytical queries (not materialized)
+│   ├── macro_query.sql
+│   └── target_variable.sql
+├── macros/                    # Reusable Jinja macros
+│   ├── generate_schema.sql    # Custom schema naming override
+│   └── macro_multiplication_practice.sql
 ├── models/
-│   ├── Bronze/              # Raw source passthrough views
+│   ├── Bronze/                 # Raw source passthrough views/tables
 │   │   ├── bronze_sales.sql
 │   │   ├── bronze_Dim_customers.sql
 │   │   ├── bronze_Dim_products.sql
 │   │   ├── bronze_Dim_store.sql
 │   │   ├── bronze_dim_date.sql
 │   │   ├── bronze_returns.sql
-│   │   └── properties.yml   # Bronze model tests & column configs
-│   ├── silver/               # Cleaned, joined, enriched models
+│   │   └── properties.yml      # Column-level tests & docs
+│   ├── silver/
 │   │   └── silver_sales_information.sql
-│   ├── Gold/                 # Aggregated, analytics-ready models
+│   ├── Gold/
 │   │   └── source_gold_items.sql
 │   └── source/
-│       └── sources.yml       # Source table declarations
-├── macros/                   # Custom Jinja macros
-│   ├── generate_schema_name.sql
-│   └── multiply_numbers.sql
-├── seeds/                    # Static reference CSVs loaded via `dbt seed`
-├── snapshots/                # SCD Type 2 snapshots
+│       └── sources.yml         # Source table declarations
+├── seeds/                      # Static reference CSVs
+│   └── lookup.csv
+├── snapshots/                  # SCD Type 2 definitions
 │   └── gold_items.yml
-├── tests/                    # Custom singular tests
-├── analyses/
+├── tests/                      # Custom singular data tests
+│   └── only_positive_value_test.sql
 ├── dbt_project.yml
-└── profiles.yml              # NOT committed — see Setup below
+├── profiles.yml                 # Local only — gitignored
+└── README.md
 ```
+
+## Core dbt Concepts Used
+
+This project intentionally covers the key concepts that define modern analytics engineering with dbt:
+
+- **Medallion Architecture** — Bronze/Silver/Gold layering for progressive data refinement, now an industry-standard pattern (popularized by Databricks' lakehouse architecture).
+- **`ref()` and `source()`** — all models reference each other via `{{ ref('model_name') }}` rather than hardcoded table names, building an automatic DAG (directed acyclic graph) of dependencies that dbt uses to run models in the correct order.
+- **Jinja templating & macros** — reusable logic (`multiply_numbers`, custom `generate_schema_name`) instead of copy-pasted SQL.
+- **Materializations** — `view` for lightweight Bronze passthroughs, `table` for heavier Silver/Gold transformations that benefit from pre-computation.
+- **Generic vs. singular tests** — schema-defined tests (`unique`, `not_null`, `accepted_values`) for common checks, and custom SQL-based singular tests (`only_positive_value_test`) for business-specific rules.
+- **Seeds** — version-controlled static/reference data (`lookup.csv`) loaded directly into the warehouse via `dbt seed`.
+- **Snapshots & SCD Type 2** — tracking how dimensional data changes over time using the `timestamp` strategy, preserving full history rather than overwriting records.
+- **Multi-environment targets** — `dev` and `prod` targets in `profiles.yml`, using `{{ target.catalog }}` instead of hardcoded catalog names so the same codebase deploys safely to either environment without modification.
+- **`dbt build`** — a single command that runs seeds → models → snapshots → tests in dependency order, the modern recommended alternative to running each separately.
+- **Data lineage** — dbt automatically generates a visual DAG (viewable via `dbt docs generate` or the VS Code dbt extension's Lineage tab) showing how data flows from raw sources through to final Gold models.
 
 ## Setup
 
@@ -71,7 +139,7 @@ pip install dbt-databricks
 ```
 
 ### 3. Configure `profiles.yml`
-This file is intentionally **excluded from git** (it holds credentials) and must be created locally:
+This file is intentionally **excluded from git** (it holds credentials) and must be created locally, with separate dev/prod targets:
 
 ```yaml
 salman_dbt_prac:
@@ -80,6 +148,14 @@ salman_dbt_prac:
     dev:
       type: databricks
       catalog: dbt_dev
+      schema: default
+      host: <your-databricks-host>
+      http_path: <your-sql-warehouse-http-path>
+      token: <your-databricks-access-token>
+      threads: 4
+    prod:
+      type: databricks
+      catalog: dbt_pract_prod
       schema: default
       host: <your-databricks-host>
       http_path: <your-sql-warehouse-http-path>
@@ -98,44 +174,71 @@ dbt debug
 
 | Command | Purpose |
 |---|---|
-| `dbt run` | Build all models |
+| `dbt run` | Build all models (dev target by default) |
 | `dbt run -s silver_sales_information` | Build a single model |
 | `dbt test` | Run all data tests |
 | `dbt seed` | Load seed CSVs into Databricks |
 | `dbt snapshot` | Run SCD Type 2 snapshots |
-| `dbt build` | Run seeds, models, snapshots, and tests together |
-| `dbt docs generate && dbt docs serve` | Generate and view project documentation |
+| `dbt build` | Run seeds, models, snapshots, and tests together, in dependency order |
+| `dbt build --target prod` | Deploy the full project to the production catalog |
+| `dbt compile --target prod` | Dry-run: resolve all Jinja/refs without executing, to catch errors before deploying |
+| `dbt docs generate && dbt docs serve` | Generate and view interactive project documentation with lineage graph |
 
 ## Models
 
 ### Bronze Layer
-Thin passthrough views (`select * from {{ source(...) }}`) over raw source tables: sales, customers, products, store, date, and returns.
+Thin passthrough views/tables over raw source tables: `bronze_sales`, `bronze_Dim_customers`, `bronze_Dim_products`, `bronze_Dim_store`, `bronze_dim_date`, `bronze_returns`.
 
 ### Silver Layer — `silver_sales_information`
 Joins sales with product and customer dimensions, calculates gross amounts via the custom `multiply_numbers` macro, and aggregates total gross sales by `category` and `gender`.
 
 ### Gold Layer — `source_gold_items`
-Deduplicates item records using a `row_number()` window function, keeping the most recently updated row per item.
-
-### Snapshots — `gold_items`
-SCD Type 2 snapshot tracking historical changes to gold item records using the `timestamp` strategy on an `updated_at` column.
+Deduplicates item records using a `row_number()` window function, keeping the most recently updated row per item — a standard pattern for ensuring idempotent, current-state Gold tables.
 
 ## Macros
 
-- **`multiply_numbers(col1, col2)`** — reusable Jinja macro for multiplying two columns.
-- **`generate_schema_name(custom_schema_name, node)`** — overrides dbt's default schema naming to use the custom schema directly rather than appending it to the target schema.
+- **`multiply_numbers(col1, col2)`** — reusable Jinja macro that inlines a multiplication expression, demonstrating DRY (Don't Repeat Yourself) principles in SQL generation.
+- **`generate_schema_name(custom_schema_name, node)`** — overrides dbt's default schema-naming behavior to use the custom schema directly (e.g. `bronze`, `silver`, `gold`) rather than dbt's default of appending it to the target schema.
 
-## Testing
+## Testing Strategy
 
-Data quality is enforced via generic dbt tests defined in `models/Bronze/properties.yml`:
+Data quality is enforced at multiple levels:
+
+**Generic (schema) tests** — defined in `models/Bronze/properties.yml`:
 - `unique` / `not_null` on primary keys (`sales_id`, `store_sk`)
-- `accepted_values` on `store_name` to validate against a known list of store locations
+- `accepted_values` on `store_name` and `Country` to validate against known reference lists
 
-## Notes
+**Singular (custom SQL) tests** — defined in `tests/`:
+- `only_positive_value_test` — validates that numeric business fields never contain invalid negative values
 
-- Folder casing matters in `dbt_project.yml` — model config paths (`Bronze`, `silver`, `Gold`) must exactly match the actual folder names on disk.
-- `profiles.yml` must never be committed — it's gitignored. If a token is ever accidentally committed, rotate it immediately in Databricks and scrub it from git history before pushing.
+**Result**: 8/8 data tests passing in the production build.
 
-## License
+## Snapshots (SCD Type 2)
 
-Personal practice project — no license specified.
+The `gold_items` snapshot tracks historical changes to item records using dbt's `timestamp` strategy, keyed on `id` and driven by the `updated` column. This means every change to an item is preserved as a new row with `dbt_valid_from` / `dbt_valid_to` columns, rather than overwriting history — a standard data warehousing pattern for auditability and point-in-time analysis.
+
+## Environments & Deployment
+
+This project deploys cleanly across two isolated environments using Databricks' Unity Catalog:
+
+| Target | Catalog | Purpose |
+|---|---|---|
+| `dev` | `dbt_dev` | Local development and iteration |
+| `prod` | `dbt_pract_prod` | Production deployment |
+
+Hardcoded catalog references were replaced with `{{ target.catalog }}` throughout `sources.yml` and snapshot configs, so the exact same code deploys correctly to either environment with no manual edits — a core best practice for safe, repeatable deployments.
+
+**Latest production build**: 18/18 nodes succeeded — 1 seed, 1 snapshot, 5 table models, 8 data tests, 3 view models, completed with zero errors.
+
+## Lessons Learned
+
+Building this project surfaced several real-world engineering gotchas worth documenting:
+
+- **Folder casing matters.** `dbt_project.yml` config paths (`Bronze`, `silver`, `Gold`) must exactly match actual folder names on disk — a mismatch causes silent "unused configuration path" warnings.
+- **Windows is case-insensitive, Git is not.** This can cause Git to track duplicate paths for what Windows treats as a single file/folder, leading to confusing phantom diffs. Mitigated with `git config core.ignorecase false`.
+- **Secrets must never be committed.** `profiles.yml` holds access tokens and is permanently gitignored. When a secret is accidentally committed, the correct remediation is: rotate the credential immediately, then use `git filter-repo` to scrub it from all history (not just the latest commit) before pushing.
+- **`ref()` beats hardcoded joins.** Referencing a CTE or model incorrectly by its raw table name (instead of the aliased CTE) can silently "work" in some cases while bypassing intended transformation logic — a subtle bug worth testing for.
+
+---
+
+*Built as a hands-on practice project to learn modern analytics engineering patterns with dbt and Databricks.*
