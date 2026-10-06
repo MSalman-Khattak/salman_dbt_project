@@ -1,3 +1,8 @@
+<img width="3840" height="2400" alt="Screenshot (235)" src="https://github.com/user-attachments/assets/e7ab39e2-4f95-49b1-90fa-12ddeea3ade0" />
+<img width="3840" height="2400" alt="Screenshot (236)" src="https://github.com/user-attachments/assets/23d4e13c-545d-4c10-bfd3-5481df6a1c0c" />
+<img width="3840" height="2400" alt="Screenshot (237)" src="https://github.com/user-attachments/assets/13f58103-76e4-469e-b4b5-96875d5bcfbf" />
+<img width="3840" height="2400" alt="Screenshot (238)" src="https://github.com/user-attachments/assets/6087ddc4-971f-45ff-b98f-7286036e9274" />
+<img width="3840" height="2400" alt="Screenshot (239)" src="https://github.com/user-attachments/assets/d096b113-793d-440a-bfbf-2b53dfe536e2" />
 # Salman DBT Practice Project
 
 A production-deployed **dbt (data build tool)** project implementing a **Medallion Architecture** (Bronze → Silver → Gold) on **Databricks**, built end-to-end: raw ingestion, layered transformation, data quality testing, slowly changing dimension tracking, and multi-environment deployment.
